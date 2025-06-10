@@ -1,0 +1,53 @@
+# Terraform state, plans & lock
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+*.tfplan
+
+# Override files (local customization)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Sensitive inputs
+*.tfvars
+*.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Terraform CLI config
+.terraformrc
+terraform.rc
+
+# Azure CLI cache & logs
+.azure/
+*.azure.json
+azuresynclog*.log
+
+# Windows script outputs (batch/PowerShell)
+*.log
+*.out
+*.json
+*.csv
+*.xml
+
+# Environment files
+.env
+.env.local
+
+# macOS/Windows OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor folders
+.vscode/
+.idea/
+*.code-workspace
+
+# Backup/temp files
+*~
+~*

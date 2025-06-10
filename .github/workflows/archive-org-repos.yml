@@ -1,0 +1,38 @@
+name: Archive Private Repos to Azure
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 5"   # <=== Runs at 03:00, only on Friday.
+jobs:
+  archive:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install Az PowerShell modules
+        run: |
+          Install-Module -Name Az.Accounts -Force -Scope CurrentUser
+          Install-Module -Name Az.Storage -Force -Scope CurrentUser
+
+      - name: Create Token
+        id: create_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.ARCHIVE_APP_ID }}
+          private_key: ${{ secrets.ARCHIVE_APP_PRIVATE_KEY }}
+
+      - name: Archive selected private repos
+        run: |
+          pwsh ./archive-private-repos.ps1 `
+            -GitHubOrg ${{ vars.GIT_HUB_ORG }} `
+            -GitHubToken ${{ steps.create_token.outputs.token }} `
+            -StorageAccountName ${{ vars.AZURE_STORAGE_ACCOUNT }} `
+            -StorageAccountKey ${{ secrets.AZURE_STORAGE_KEY }} `
+            -ContainerName ${{ vars.CONTAINER_NAME }} `
+        env:
+          GITHUB_TOKEN: ${{ steps.create_token.outputs.token }}
+          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+          AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
