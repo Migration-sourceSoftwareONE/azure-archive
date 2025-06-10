@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: write
+  actions: write
   id-token: write
-  contents: read
 
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
