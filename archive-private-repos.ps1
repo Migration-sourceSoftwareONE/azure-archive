@@ -1,9 +1,9 @@
 param(
-    [string]$GitHubOrg = "SONE-WorkshopPoligon",
+    [string]$GitHubOrg = $env:GIT_HUB_ORG,
     [string]$GitHubToken,
     [string]$StorageAccountName,
     [string]$StorageAccountKey,
-    [string]$ContainerName = "security-backups"
+    [string]$ContainerName = $env:CONTAINER_NAME
 )
 
 Import-Module Az.Accounts -Force
