@@ -55,7 +55,7 @@ jobs:
           echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
 
       - name: Set repo variable AZURE_STORAGE_ACCOUNT
-        run: gh variable set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
+        run: gh secret set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
