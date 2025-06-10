@@ -12,7 +12,7 @@ env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  PAT_TOKEN: ${{ secrets.SOURCE_PAT }}
 
 jobs:
   terraform:
@@ -57,14 +57,14 @@ jobs:
       - name: Set repo variable AZURE_STORAGE_ACCOUNT
         run: gh secret set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
 
       - name: Set repo variable CONTAINER_NAME
         run: gh variable set CONTAINER_NAME --body "${{ steps.tfoutputs.outputs.container_name }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
 
       - name: Set repo secret AZURE_STORAGE_KEY
         run: gh secret set AZURE_STORAGE_KEY --body "${{ steps.tfoutputs.outputs.storage_key }}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
