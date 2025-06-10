@@ -16,8 +16,8 @@ env:
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
   AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
   AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-  GIT_HUB_ORG: ${{ secrets.GIT_HUB_ORG }}
-  CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
+  GIT_HUB_ORG: ${{ vars.GIT_HUB_ORG }}
+  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
 
 jobs:
   archive:
