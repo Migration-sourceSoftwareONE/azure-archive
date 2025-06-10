@@ -1,0 +1,65 @@
+name: Deploy Terraform Storage
+
+on:
+  workflow_dispatch:
+env:
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.ARM_CLIENT_ID }}
+          tenant-id: ${{ env.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          terraform apply -auto-approve \
+            -var "subscription_id=${ARM_SUBSCRIPTION_ID}" \
+            -var "tenant_id=${ARM_TENANT_ID}"
+
+      - name: Get Terraform Outputs
+        id: tfoutputs
+        run: |
+          echo "account_name=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
+          echo "container_name=$(terraform output -raw container_name)" >> $GITHUB_OUTPUT
+          echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
+
+      - name: Set repo variable AZURE_STORAGE_ACCOUNT
+        uses: peter-evans/create-or-update-variable@v3
+        with:
+          name: AZURE_STORAGE_ACCOUNT
+          value: ${{ steps.tfoutputs.outputs.account_name }}
+
+      - name: Set repo variable CONTAINER_NAME
+        uses: peter-evans/create-or-update-variable@v3
+        with:
+          name: CONTAINER_NAME
+          value: ${{ steps.tfoutputs.outputs.container_name }}
+
+      - name: Set repo secret AZURE_STORAGE_KEY
+        uses: peter-evans/create-or-update-secret@v3
+        with:
+          name: AZURE_STORAGE_KEY
+          value: ${{ steps.tfoutputs.outputs.storage_key }}
