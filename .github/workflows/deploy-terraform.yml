@@ -2,6 +2,7 @@ name: Deploy Terraform Storage
 
 on:
   workflow_dispatch:
+
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
@@ -47,19 +48,16 @@ jobs:
           echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
 
       - name: Set repo variable AZURE_STORAGE_ACCOUNT
-        uses: peter-evans/create-or-update-variable@v2
-        with:
-          name: AZURE_STORAGE_ACCOUNT
-          value: ${{ steps.tfoutputs.outputs.account_name }}
+        run: gh variable set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set repo variable CONTAINER_NAME
-        uses: peter-evans/create-or-update-variable@v2
-        with:
-          name: CONTAINER_NAME
-          value: ${{ steps.tfoutputs.outputs.container_name }}
+        run: gh variable set CONTAINER_NAME --body "${{ steps.tfoutputs.outputs.container_name }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set repo secret AZURE_STORAGE_KEY
-        uses: peter-evans/create-or-update-secret@v2
-        with:
-          name: AZURE_STORAGE_KEY
-          value: ${{ steps.tfoutputs.outputs.storage_key }}
+        run: gh secret set AZURE_STORAGE_KEY --body "${{ steps.tfoutputs.outputs.storage_key }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
