@@ -22,7 +22,7 @@ env:
 jobs:
   archive:
     runs-on: windows-latest
-
+    environment: production
     steps:
       - name: Checkout this repo
         uses: actions/checkout@v4
