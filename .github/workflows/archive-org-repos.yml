@@ -5,6 +5,11 @@ on:
   schedule:
     - cron: "0 3 * * 5"   # Runs at 03:00, only on Friday.
 
+permissions:
+  contents: write
+  actions: write
+  id-token: write
+
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
