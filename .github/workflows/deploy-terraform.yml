@@ -1,4 +1,4 @@
-name: Deploy Terraform with repo variables
+name: Deploy Terraform Storage
 
 on:
   workflow_dispatch:
@@ -17,44 +17,28 @@ jobs:
         working-directory: terraform
     env:
       ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-      RESOURCE_GROUP_NAME: ${{ vars.RESOURCE_GROUP_NAME }}
-      CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
-      LOCATION: ${{ vars.LOCATION }}
       PAT_TOKEN: ${{ secrets.SOURCE_PAT }}
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Azure CLI login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.ARM_CLIENT_ID }}
-          tenant-id: ${{ secrets.ARM_TENANT_ID }}
-          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-
-      - name: Ensure backend storage exists
-        run: |
-          az group create --name "$RESOURCE_GROUP_NAME" --location "$LOCATION"
-          az storage account create --name "$AZURE_STORAGE_ACCOUNT" --resource-group "$RESOURCE_GROUP_NAME" --location "$LOCATION" --sku Standard_LRS --kind StorageV2 --encryption-services blob
-          ACCOUNT_KEY=$(az storage account keys list --resource-group "$RESOURCE_GROUP_NAME" --account-name "$AZURE_STORAGE_ACCOUNT" --query "[0].value" -o tsv)
-          az storage container create --name "$CONTAINER_NAME" --account-name "$AZURE_STORAGE_ACCOUNT" --account-key $ACCOUNT_KEY
+      # No azure/login step needed for backend authentication via Service Principal env vars
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.5
 
-      - name: Terraform Init
+      - name: Terraform Init (with backend Service Principal)
         run: terraform init
-
-      - name: Terraform Plan
-        run: terraform plan -lock=false
 
       - name: Terraform Apply
         run: |
-          terraform apply -auto-approve -lock=false\
+          terraform apply -auto-approve \
             -var "subscription_id=${ARM_SUBSCRIPTION_ID}" \
             -var "tenant_id=${ARM_TENANT_ID}"
 
