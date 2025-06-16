@@ -10,16 +10,6 @@ permissions:
   actions: write
   id-token: write
 
-env:
-  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-  AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-  AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-  GIT_HUB_ORG: ${{ vars.GIT_HUB_ORG }}
-  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
-
 jobs:
   archive:
     runs-on: windows-latest
@@ -36,17 +26,24 @@ jobs:
       - name: Azure Login with OIDC
         uses: azure/login@v2
         with:
-          client-id: ${{ env.ARM_CLIENT_ID }}
-          tenant-id: ${{ env.ARM_TENANT_ID }}
-          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Create Token
+        id: create_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.ARCHIVE_APP_ID }}
+          private_key: ${{ secrets.ARCHIVE_APP_PRIVATE_KEY }}
 
       - name: Archive selected private repos
         run: |
           pwsh ./archive-private-repos.ps1 `
-            -GitHubOrg ${{ env.GIT_HUB_ORG }} `
-            -GitHubToken ${{ secrets.GITHUB_TOKEN }} `
-            -StorageAccountName ${{ env.AZURE_STORAGE_ACCOUNT }} `
-            -StorageAccountKey ${{ env.AZURE_STORAGE_KEY }} `
-            -ContainerName ${{ env.CONTAINER_NAME }}
+            -GitHubOrg ${{ github.repository_owner }} `
+            -GitHubToken ${{ steps.create_token.outputs.token }} `
+            -StorageAccountName ${{ secrets.AZURE_STORAGE_ACCOUNT }} `
+            -StorageAccountKey ${{ secrets.AZURE_STORAGE_KEY }} `
+            -ContainerName ${{ vars.CONTAINER_NAME }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.create_token.outputs.token }}
