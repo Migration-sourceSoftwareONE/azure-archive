@@ -2,16 +2,6 @@ name: Deploy Terraform Storage
 
 on:
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'Terraform action to run'
-        required: true
-        default: 'apply'
-        type: choice
-        options:
-          - plan
-          - apply
-          - destroy
 
 permissions:
   contents: write
@@ -30,6 +20,8 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # No azure/login step needed for backend authentication via Service Principal env vars
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -43,46 +35,11 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
-      - name: Import existing Resource Group if not in state
+      - name: Terraform Apply
         run: |
-          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
-          set -e
-          if ! terraform state show azurerm_resource_group.rg > /dev/null 2>&1; then
-            terraform import azurerm_resource_group.rg /subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME
-          fi
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-
-      - name: Run Terraform Action
-        run: |
-          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
-          case "${{ github.event.inputs.action }}" in
-            plan)
-              terraform plan \
-                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
-              ;;
-            apply)
-              terraform apply -auto-approve \
-                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
-              ;;
-            destroy)
-              terraform destroy -auto-approve \
-                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
-              ;;
-            *)
-              echo "Unknown action: ${{ github.event.inputs.action }}. Use plan, apply, or destroy."
-              exit 1
-              ;;
-          esac
+          terraform apply -auto-approve \
+            -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
+            -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
@@ -90,7 +47,6 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
       - name: Get Terraform Outputs
-        if: ${{ github.event.inputs.action == 'apply' }}
         id: tfoutputs
         run: |
           echo "account_name=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
@@ -98,7 +54,6 @@ jobs:
           echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
 
       - name: Create Token
-        if: ${{ github.event.inputs.action == 'apply' }}
         id: create_token
         uses: tibdex/github-app-token@v2
         with:
@@ -106,19 +61,16 @@ jobs:
           private_key: ${{ secrets.ARCHIVE_APP_PRIVATE_KEY }}
 
       - name: Set repo secret AZURE_STORAGE_ACCOUNT
-        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh secret set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
         env:
           GH_TOKEN: ${{ steps.create_token.outputs.token }}
 
       - name: Set repo variable CONTAINER_NAME
-        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh variable set CONTAINER_NAME --body "${{ steps.tfoutputs.outputs.container_name }}"
         env:
           GH_TOKEN: ${{ steps.create_token.outputs.token }}
 
       - name: Set repo secret AZURE_STORAGE_KEY
-        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh secret set AZURE_STORAGE_KEY --body "${{ steps.tfoutputs.outputs.storage_key }}"
         env:
           GH_TOKEN: ${{ steps.create_token.outputs.token }}
