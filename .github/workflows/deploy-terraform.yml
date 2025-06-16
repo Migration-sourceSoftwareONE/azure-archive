@@ -43,19 +43,6 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
-      - name: Import existing Resource Group if not in state
-        run: |
-          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
-          set -e
-          if ! terraform state show azurerm_resource_group.rg > /dev/null 2>&1; then
-            terraform import azurerm_resource_group.rg /subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/$RESOURCE_GROUP_NAME
-          fi
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-
       - name: Run Terraform Action
         run: |
           RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
