@@ -15,12 +15,6 @@ jobs:
     defaults:
       run:
         working-directory: terraform
-    env:
-      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-      PAT_TOKEN: ${{ secrets.SOURCE_PAT }}
 
     steps:
       - name: Checkout repo
@@ -35,12 +29,22 @@ jobs:
 
       - name: Terraform Init (with backend Service Principal)
         run: terraform init
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
       - name: Terraform Apply
         run: |
           terraform apply -auto-approve \
-            -var "subscription_id=${ARM_SUBSCRIPTION_ID}" \
-            -var "tenant_id=${ARM_TENANT_ID}"
+            -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
+            -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
       - name: Get Terraform Outputs
         id: tfoutputs
@@ -49,17 +53,24 @@ jobs:
           echo "container_name=$(terraform output -raw container_name)" >> $GITHUB_OUTPUT
           echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
 
-      - name: Set repo variable AZURE_STORAGE_ACCOUNT
+      - name: Create Token
+        id: create_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.ARCHIVE_APP_ID }}
+          private_key: ${{ secrets.ARCHIVE_APP_PRIVATE_KEY }}
+
+      - name: Set repo secret AZURE_STORAGE_ACCOUNT
         run: gh secret set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
 
       - name: Set repo variable CONTAINER_NAME
         run: gh variable set CONTAINER_NAME --body "${{ steps.tfoutputs.outputs.container_name }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
 
       - name: Set repo secret AZURE_STORAGE_KEY
         run: gh secret set AZURE_STORAGE_KEY --body "${{ steps.tfoutputs.outputs.storage_key }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
