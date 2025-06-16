@@ -12,6 +12,10 @@ on:
           - plan
           - apply
           - destroy
+      resource_group_name:
+        description: 'Azure Resource Group Name'
+        required: true
+        default: 'rg-github-archives'
 
 permissions:
   contents: write
@@ -43,23 +47,38 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
+      - name: Import existing Resource Group if not in state
+        run: |
+          set -e
+          if ! terraform state show azurerm_resource_group.rg > /dev/null 2>&1; then
+            terraform import azurerm_resource_group.rg /subscriptions/${{ secrets.ARM_SUBSCRIPTION_ID }}/resourceGroups/${{ github.event.inputs.resource_group_name }}
+          fi
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
       - name: Run Terraform Action
         run: |
           case "${{ github.event.inputs.action }}" in
             plan)
               terraform plan \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=${{ github.event.inputs.resource_group_name }}"
               ;;
             apply)
               terraform apply -auto-approve \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=${{ github.event.inputs.resource_group_name }}"
               ;;
             destroy)
               terraform destroy -auto-approve \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=${{ github.event.inputs.resource_group_name }}"
               ;;
             *)
               echo "Unknown action: ${{ github.event.inputs.action }}. Use plan, apply, or destroy."
