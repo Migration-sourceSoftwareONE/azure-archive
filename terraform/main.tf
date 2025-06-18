@@ -7,7 +7,7 @@ provider "azurerm" {
 
 # Variables (you can also hardcode values if preferred)
 variable "resource_group_name" {
-  default = "rg-github-archives"
+  default = "rg-github-archives-MC"
 }
 
 variable "location" {
@@ -15,11 +15,11 @@ variable "location" {
 }
 
 variable "storage_account_name" {
-  default = "ghrepoarchive123" # must be globally unique and lowercase
+  default = "ghrepoarchive123-MC" # must be globally unique and lowercase
 }
 
 variable "container_name" {
-  default = "security-backups"
+  default = "security-backups-MC"
 }
 
 # Resource Group
