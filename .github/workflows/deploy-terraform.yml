@@ -45,7 +45,7 @@ jobs:
 
       - name: Run Terraform Action
         run: |
-          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
+          RESOURCE_GROUP_NAME="rg-github-archives-MC" # must match your main.tf default or -var value!
           case "${{ github.event.inputs.action }}" in
             plan)
               terraform plan \
