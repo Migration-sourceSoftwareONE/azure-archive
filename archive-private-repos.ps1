@@ -1,9 +1,9 @@
 param(
-    [string]$GitHubOrg = $env:GIT_HUB_ORG,
+    [string]$GitHubOrg,
     [string]$GitHubToken,
     [string]$StorageAccountName,
     [string]$StorageAccountKey,
-    [string]$ContainerName = $env:CONTAINER_NAME
+    [string]$ContainerName
 )
 
 Import-Module Az.Accounts -Force
