@@ -4,10 +4,50 @@
 
 This solution enables you to **automatically archive all private repositories from a GitHub Organization to Azure Blob Storage**. It leverages two main GitHub Actions workflows:
 
-1. **Deploy Terraform Storage**  
+1. **Provision Remote Backend for Terraform**  
+   Before any other resources can be deployed, you must provision the Azure Storage account and blob container that will be used as the remote backend for Terraform state.  
+   - This ensures your Terraform state is stored securely and centrally.
+   - You can do this manually, or via an initial Terraform run with a local backend, or via an ARM/Bicep template.
+   - Once the backend is available, update your `terraform` block in `main.tf` to point to this storage account and container.
+
+2. **Deploy Terraform Storage**  
    Provisions the required Azure Storage account, blob container, and outputs their credentials as secrets/variables using Terraform.
-2. **Archive Private Repos to Azure**  
+3. **Archive Private Repos to Azure**  
    Archives all your organization's private repositories as ZIP files and uploads them to Azure Blob Storage (Archive tier).
+
+The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, and uses a GitHub App with the correct permissions to set repository secrets and variables.
+
+---
+
+## ⚠️ Remote Backend Provisioning (Required First Step)
+
+Before running the `Deploy Terraform Storage` workflow, you must ensure that the Azure Storage account and container used for the Terraform remote backend **already exist**.
+
+- The backend storage is where Terraform stores its state file for all subsequent runs.
+- If these resources do not exist yet, create them **manually** in the Azure Portal, or with a short CLI script:
+
+```sh
+az storage account create --name <backendStorageAccount> --resource-group <resourceGroup> --sku Standard_LRS
+az storage container create --name <backendContainer> --account-name <backendStorageAccount>
+```
+
+- Update your `terraform` block in `main.tf` (or equivalent) to match the names you created:
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "<resourceGroup>"
+    storage_account_name = "<backendStorageAccount>"
+    container_name       = "<backendContainer>"
+    key                  = "terraform.tfstate"
+  }
+}
+```
+
+- Only after this backend is in place can you run the workflows that rely on remote state.
+
+---
+
 
 The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, and uses a GitHub App with the correct permissions to set repository secrets and variables.
 
