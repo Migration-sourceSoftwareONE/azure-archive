@@ -4,6 +4,7 @@
 
 This solution enables you to **automatically archive all private repositories from a GitHub Organization to Azure Blob Storage**. It leverages two main GitHub Actions workflows:
 
+
 1. **Provision Remote Backend for Terraform (Required First Step)**  
    Before running Terraform to provision Azure Storage for the archives, you must first create the Azure Storage account and container that will be used as the **remote backend** for Terraform state.  
    - This backend must exist before you run any other Terraform workflow that uses remote state.
@@ -16,7 +17,41 @@ This solution enables you to **automatically archive all private repositories fr
 3. **Archive Private Repos to Azure**  
    Archives all your organization's private repositories as ZIP files and uploads them to Azure Blob Storage (Archive tier).
 
-The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, with fallback to repository secrets/variables for storage credentials.
+The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, and uses a GitHub App with the correct permissions to set repository secrets and variables.
+
+---
+
+## ⚠️ Remote Backend Provisioning (Required First Step)
+
+Before running the `Deploy Terraform Storage` workflow, you must ensure that the Azure Storage account and container used for the Terraform remote backend **already exist**.
+
+- The backend storage is where Terraform stores its state file for all subsequent runs.
+- If these resources do not exist yet, create them **manually** in the Azure Portal, or with a short CLI script:
+
+```sh
+az storage account create --name <backendStorageAccount> --resource-group <resourceGroup> --sku Standard_LRS
+az storage container create --name <backendContainer> --account-name <backendStorageAccount>
+```
+
+- Update your `terraform` block in `main.tf` (or equivalent) to match the names you created:
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "<resourceGroup>"
+    storage_account_name = "<backendStorageAccount>"
+    container_name       = "<backendContainer>"
+    key                  = "terraform.tfstate"
+  }
+}
+```
+
+- Only after this backend is in place can you run the workflows that rely on remote state.
+
+---
+
+
+The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, and uses a GitHub App with the correct permissions to set repository secrets and variables.
 
 ---
 
@@ -53,7 +88,7 @@ Once the backend exists, you can safely run the `Deploy Terraform Storage` workf
 - [Workflows Overview](#workflows-overview)
 - [Required GitHub Secrets & Variables](#required-github-secrets--variables)
 - [Azure Entra ID (AAD) App Registration & OIDC Setup](#azure-entra-id-aad-app-registration--oidc-setup)
-- [Personal Access Token (PAT) Requirements](#personal-access-token-pat-requirements)
+- [GitHub App Requirements](#github-app-requirements)
 - [Workflow Details](#workflow-details)
 - [PowerShell Script Parameters](#powershell-script-parameters)
 - [How It Works](#how-it-works)
@@ -71,12 +106,13 @@ Once the backend exists, you can safely run the `Deploy Terraform Storage` workf
   - `AZURE_STORAGE_ACCOUNT` (variable or secret)
   - `CONTAINER_NAME` (variable)
   - `AZURE_STORAGE_KEY` (secret)
+- **Flexible:** Prompts user to choose between `plan`, `apply`, or `destroy` for Terraform operations.
 
 ### 2. `Archive Private Repos to Azure` Workflow
 
 - **Purpose:** Archives all private repos to a ZIP, then uploads to Azure Blob Storage (Archive tier).
 - **Runs on:** Schedule (cron, e.g., every Friday) or manually.
-- **Requires:** OIDC credentials for Azure, GitHub PAT for setting repo secrets/variables (on Terraform workflow), and organization name.
+- **Requires:** OIDC credentials for Azure, GitHub App token for setting repo secrets/variables (on Terraform workflow), and organization name.
 
 ---
 
@@ -87,7 +123,8 @@ Once the backend exists, you can safely run the `Deploy Terraform Storage` workf
 | `ARM_CLIENT_ID`        | Secret    | **You** (from Entra ID App)   | Azure OIDC login                      |
 | `ARM_TENANT_ID`        | Secret    | **You** (from Entra ID App)   | Azure OIDC login                      |
 | `ARM_SUBSCRIPTION_ID`  | Secret    | **You** (from Azure Portal)   | Azure OIDC login                      |
-| `SOURCE_PAT`           | Secret    | **You** (PAT token)           | To set repo secrets/variables via Terraform workflow |
+| `ARCHIVE_APP_ID`       | Secret    | **You** (from GitHub App)     | GitHub App for repo variable/secret mgmt |
+| `ARCHIVE_APP_PRIVATE_KEY` | Secret | **You** (from GitHub App)     | GitHub App for repo variable/secret mgmt |
 | `GIT_HUB_ORG`          | Variable  | **You** (repo variable)       | Your GitHub organization name         |
 | `AZURE_STORAGE_ACCOUNT`| Variable  | **Terraform**                 | Storage account name                  |
 | `CONTAINER_NAME`       | Variable  | **Terraform**                 | Container name                        |
@@ -126,42 +163,46 @@ Once the backend exists, you can safely run the `Deploy Terraform Storage` workf
 
 ---
 
-## Personal Access Token (PAT) Requirements
+## GitHub App Requirements
 
-- Used in the `Deploy Terraform Storage` workflow to set repo variables/secrets via the `gh` CLI.
-- **Required Scopes:**
-  - `repo`
-  - `admin:repo_hook`
-  - `workflow`
-  - `write:packages`
-  - `read:org`
-  - `read:user`
-  - `user:email`
-- [Creating a PAT](https://github.com/settings/tokens/new)
-- Set as `SOURCE_PAT` secret in your repository.
+- **Why a GitHub App?**  
+  The Terraform workflow uses a GitHub App for secure, auditable, and fine-grained permission to set repository secrets and variables.
+- **Required Permissions:**  
+  - `Administration` (read & write)
+  - `Secrets` (read & write)
+  - `Variables` (read & write)
+- **How to configure:**  
+  - [Create a GitHub App](https://github.com/settings/apps/new)
+  - Generate a Private Key and note the App ID.
+  - Install the App on your repository with the required permissions.
+  - Add your App ID as `ARCHIVE_APP_ID` and the private key as `ARCHIVE_APP_PRIVATE_KEY` in your repository secrets.
 
 ---
 
 ## Workflow Details
 
-### `Deploy Terraform Storage` (example)
+### `Deploy Terraform Storage` (updated example)
 
 ```yaml
 name: Deploy Terraform Storage
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action to run'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
 
 permissions:
   contents: write
   actions: write
   id-token: write
-
-env:
-  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-  PAT_TOKEN: ${{ secrets.SOURCE_PAT }}
 
 jobs:
   terraform:
@@ -173,44 +214,89 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: Azure Login (OIDC)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ env.ARM_CLIENT_ID }}
-          tenant-id: ${{ env.ARM_TENANT_ID }}
-          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.5
-      - name: Terraform Init
+
+      - name: Terraform Init (with backend Service Principal)
         run: terraform init
-      - name: Terraform Apply
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+      - name: Run Terraform Action
         run: |
-          terraform apply -auto-approve \
-            -var "subscription_id=${ARM_SUBSCRIPTION_ID}" \
-            -var "tenant_id=${ARM_TENANT_ID}"
+          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
+          case "${{ github.event.inputs.action }}" in
+            plan)
+              terraform plan \
+                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+              ;;
+            apply)
+              terraform apply -auto-approve \
+                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+              ;;
+            destroy)
+              terraform destroy -auto-approve \
+                -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
+                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+              ;;
+            *)
+              echo "Unknown action: ${{ github.event.inputs.action }}. Use plan, apply, or destroy."
+              exit 1
+              ;;
+          esac
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
       - name: Get Terraform Outputs
+        if: ${{ github.event.inputs.action == 'apply' }}
         id: tfoutputs
         run: |
           echo "account_name=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
           echo "container_name=$(terraform output -raw container_name)" >> $GITHUB_OUTPUT
           echo "storage_key=$(terraform output -raw storage_account_primary_key)" >> $GITHUB_OUTPUT
-      - name: Set repo variable AZURE_STORAGE_ACCOUNT
+
+      - name: Create Token
+        if: ${{ github.event.inputs.action == 'apply' }}
+        id: create_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.ARCHIVE_APP_ID }}
+          private_key: ${{ secrets.ARCHIVE_APP_PRIVATE_KEY }}
+
+      - name: Set repo secret AZURE_STORAGE_ACCOUNT
+        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh secret set AZURE_STORAGE_ACCOUNT --body "${{ steps.tfoutputs.outputs.account_name }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
+
       - name: Set repo variable CONTAINER_NAME
+        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh variable set CONTAINER_NAME --body "${{ steps.tfoutputs.outputs.container_name }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
+
       - name: Set repo secret AZURE_STORAGE_KEY
+        if: ${{ github.event.inputs.action == 'apply' }}
         run: gh secret set AZURE_STORAGE_KEY --body "${{ steps.tfoutputs.outputs.storage_key }}"
         env:
-          GH_TOKEN: ${{ secrets.SOURCE_PAT }}
+          GH_TOKEN: ${{ steps.create_token.outputs.token }}
 ```
 
-### `Archive Private Repos to Azure` (example)
+### `Archive Private Repos to Azure` (unchanged)
 
 ```yaml
 name: Archive Private Repos to Azure
@@ -224,15 +310,6 @@ permissions:
   contents: write
   actions: write
   id-token: write
-
-env:
-  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
-  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-  AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
-  AZURE_STORAGE_KEY: ${{ secrets.AZURE_STORAGE_KEY }}
-  GIT_HUB_ORG: ${{ vars.GIT_HUB_ORG }}
-  CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
 
 jobs:
   archive:
@@ -248,17 +325,17 @@ jobs:
       - name: Azure Login with OIDC
         uses: azure/login@v2
         with:
-          client-id: ${{ env.ARM_CLIENT_ID }}
-          tenant-id: ${{ env.ARM_TENANT_ID }}
-          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       - name: Archive selected private repos
         run: |
           pwsh ./archive-private-repos.ps1 `
-            -GitHubOrg ${{ env.GIT_HUB_ORG }} `
+            -GitHubOrg ${{ vars.GIT_HUB_ORG }} `
             -GitHubToken ${{ secrets.GITHUB_TOKEN }} `
-            -StorageAccountName ${{ env.AZURE_STORAGE_ACCOUNT }} `
-            -StorageAccountKey ${{ env.AZURE_STORAGE_KEY }} `
-            -ContainerName ${{ env.CONTAINER_NAME }}
+            -StorageAccountName ${{ secrets.AZURE_STORAGE_ACCOUNT }} `
+            -StorageAccountKey ${{ secrets.AZURE_STORAGE_KEY }} `
+            -ContainerName ${{ vars.CONTAINER_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -306,9 +383,10 @@ param(
   - Confirm `AZURE_STORAGE_ACCOUNT`, `CONTAINER_NAME`, and `AZURE_STORAGE_KEY` are set by Terraform workflow.
   - Set `GIT_HUB_ORG` variable manually (needed for the PowerShell script).
 
-- **PAT Issues:**  
-  - Ensure correct scopes.
-  - PAT must not be expired or revoked.
+- **GitHub App Issues:**  
+  - Ensure the app is installed with correct permissions.
+  - Ensure the app private key and ID are set as repository secrets.
+  - App must not be suspended or removed.
 
 - **PowerShell Script Errors:**  
   - Ensure all parameters are supplied (see workflow env/variable setup).
@@ -323,5 +401,4 @@ param(
 - [Terraform GitHub Provider](https://registry.terraform.io/providers/integrations/github/latest/docs)
 - [GitHub: Creating and using encrypted secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 - [GitHub: Creating repository variables](https://docs.github.com/en/actions/learn-github-actions/variables)
-
----
+- [Creating a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/create-a-github-app)
