@@ -45,25 +45,21 @@ jobs:
 
       - name: Run Terraform Action
         run: |
-          RESOURCE_GROUP_NAME="rg-github-archives" # must match your main.tf default or -var value!
           case "${{ github.event.inputs.action }}" in
             plan)
               terraform plan \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
               ;;
             apply)
               terraform apply -auto-approve \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
               ;;
             destroy)
               terraform destroy -auto-approve \
                 -var "subscription_id=${{ secrets.ARM_SUBSCRIPTION_ID }}" \
-                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}" \
-                -var "resource_group_name=$RESOURCE_GROUP_NAME"
+                -var "tenant_id=${{ secrets.ARM_TENANT_ID }}"
               ;;
             *)
               echo "Unknown action: ${{ github.event.inputs.action }}. Use plan, apply, or destroy."

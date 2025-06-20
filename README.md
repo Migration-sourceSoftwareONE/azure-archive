@@ -4,14 +4,16 @@
 
 This solution enables you to **automatically archive all private repositories from a GitHub Organization to Azure Blob Storage**. It leverages two main GitHub Actions workflows:
 
-1. **Provision Remote Backend for Terraform**  
-   Before any other resources can be deployed, you must provision the Azure Storage account and blob container that will be used as the remote backend for Terraform state.  
-   - This ensures your Terraform state is stored securely and centrally.
-   - You can do this manually, or via an initial Terraform run with a local backend, or via an ARM/Bicep template.
-   - Once the backend is available, update your `terraform` block in `main.tf` to point to this storage account and container.
+
+1. **Provision Remote Backend for Terraform (Required First Step)**  
+   Before running Terraform to provision Azure Storage for the archives, you must first create the Azure Storage account and container that will be used as the **remote backend** for Terraform state.  
+   - This backend must exist before you run any other Terraform workflow that uses remote state.
+   - You can create it manually via the Azure Portal or CLI, or with a simple initial Terraform run using a local backend.  
+   - After provisioning, update your `terraform` block in `main.tf` to point to the backend storage account and container.
 
 2. **Deploy Terraform Storage**  
-   Provisions the required Azure Storage account, blob container, and outputs their credentials as secrets/variables using Terraform.
+   Provisions the required Azure Storage account, blob container (for the actual archives), and outputs their credentials as secrets/variables using Terraform.
+
 3. **Archive Private Repos to Azure**  
    Archives all your organization's private repositories as ZIP files and uploads them to Azure Blob Storage (Archive tier).
 
@@ -50,6 +52,34 @@ terraform {
 
 
 The automation is powered by OIDC (OpenID Connect) for secure, secretless authentication between GitHub Actions and Azure, and uses a GitHub App with the correct permissions to set repository secrets and variables.
+
+---
+
+## ⚠️ Provisioning the Remote Backend for Terraform
+
+**This must be done before running the "Deploy Terraform Storage" workflow!**
+
+Terraform's remote backend requires an existing Azure Storage account and container to store the state file. If these resources do not exist yet, create them manually:
+
+```sh
+az storage account create --name <backendStorageAccount> --resource-group <resourceGroup> --sku Standard_LRS
+az storage container create --name <backendContainer> --account-name <backendStorageAccount>
+```
+
+Then, configure your `terraform` block (in `main.tf` or equivalent):
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "<resourceGroup>"
+    storage_account_name = "<backendStorageAccount>"
+    container_name       = "<backendContainer>"
+    key                  = "terraform.tfstate"
+  }
+}
+```
+
+Once the backend exists, you can safely run the `Deploy Terraform Storage` workflow to provision the storage resources for your archive solution.
 
 ---
 
@@ -333,8 +363,9 @@ param(
 
 ## How It Works
 
-1. **Terraform workflow** provisions Azure Storage and stores key outputs as repo secrets/variables (using a GitHub App for authentication).
-2. **Archive workflow** runs (scheduled or manual), authenticates to Azure with OIDC, and runs the PowerShell script to:
+1. **Provision backend storage** for the Terraform remote backend (manual/CLI/initial run).
+2. **Terraform workflow** provisions Azure Storage for archiving and stores key outputs as repo secrets/variables (using a PAT).
+3. **Archive workflow** runs (scheduled or manual), authenticates to Azure with OIDC, and runs the PowerShell script to:
    - Fetch all repos in your org
    - Clone each repo and ZIP it
    - Upload each ZIP to Azure Blob Storage (Archive tier)
